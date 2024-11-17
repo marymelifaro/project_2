@@ -1,0 +1,158 @@
+ 
+17.11.2024 18.40 downloading data
+wget https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR170/001/SRR1705851/SRR1705851.fastq.gz
+18.42  inspecting the data
+zcat SRR1705851.fastq.gz | head
+@SRR1705851.1 1/1
+TTCGTGATTGTTTTCACTATCGTTCCGTTTGGCACTGCATGGTGCCCAAGGCACAGCGTTGCCGTGCTGTTGTCATTTCCAGGAAGTTTTTGAGCGAAAACCAGACATAGAATGTAGCTCAAAGCAATGATAGTCTTCATGGTTAATAG
++
+,<==<<<<A@@@@@@@EEE;CEE+AC>EC;>EFFDC@=A@AE999DDD>>@E777EE75C>EF>EDEEFFFF--AE>EDEEEED=C-58AE=<D=<<DD=D9CDD@EEDED@DEDDE*9;@DDED@@@7@E*;*888@*8;@8@;;@@E
+@SRR1705851.2 2/1
+NATTAACCATGAAGACTATCATTGCTTTGAGCTACATTCTATGTCTGGTTTTCGCTCAAAAACTTCCTGGAAATGACAACAGCACGGCAACGCTGTGCCTTGGGCACCATGCAGTGCCAAACGGAACGATAGTGAAAACAATCACGAATGA
++
+#5<???BBEEEDEDDDGGGGGGIIIIIIIIIIIIIIIIIIIIIHIIIIFHHIIHHHHHIIIIHIIIIIIIHIIIIIIIIIIIIIIHHHHHHHHHHEHHHHHFFHHHHHHFFHHGFGGGGGGGGGGGGGEEEGCEEGGGGGEEGGGGCGEGG
+@SRR1705851.3 3/1
+GTTTGGCACTGCATGGTGCCCAAGGCACAGCGTTGCCGTGCTGTTGTCATTTCCAGGAAGTTTTTGAGCGAAAACCAGACATAGAATGTAGCTCAAAGCAATGATAGTCTTCATGGTTAATAG
+
+18. 45 downloading sequit in environment
+```bash
+conda install -c bioconda seqkit
+seqkit stats SRR1705851.fastq.gz
+```
+file                 format  type  num_seqs     sum_len  min_len  avg_len  max_len
+SRR1705851.fastq.gz  FASTQ   DNA    358,265  52,717,864       35    147.1      151
+18.50
+Index the reference file
+```bash
+bwa index sequence.fasta
+```
+align  roommate’s viral data to the reference sequence and make an mpileup
+```bash
+bwa mem sequence.fasta SRR1705851.fastq.gz | samtools view -S -b - | samtools sort -o roommate_sorted.bam
+```
+Index the sorted BAM file
+```bash
+samtools index roommate_sorted.bam
+```
+calculate mapping statistics
+
+```bash
+samtools view -c -F4 roommate_sorted.bam
+```
+mapped reads 361116
+```bash
+samtools view -c roommate_sorted.bam
+```
+total reads 361349
+
+Generate an mpileup file for variant calling:
+```bash
+samtools mpileup -f sequence.fasta roommate_sorted.bam > roommate.mpileup
+```
+20.20
+Run VarScan with a high variant frequency cutoff (N=0.95) to find common mutations:
+```bash
+java -jar VarScan.v2.3.9.jar mpileup2snp roommate.mpileup --min-var-freq 0.95 --variants --output-vcf 1 > high_freq_variants.vcf
+```
+Only SNPs will be reported
+Warning: No p-value threshold provided, so p-values will not be calculated
+Min coverage:   8
+Min reads2:     2
+Min var freq:   0.95
+Min avg qual:   15
+P-value thresh: 0.01
+Reading input from roommate.mpileup
+1665 bases in pileup file
+5 variant positions (5 SNP, 0 indel)
+1 were failed by the strand-filter
+4 variant positions reported (4 SNP, 0 indel)
+20 35
+Extract key columns (reference, position, alternate alleles) from the VCF:
+```bash
+awk 'NR>24 {print $1, $2, $4, $5}' high_freq_variants.vcf > common_variants_summary.txt
+```
+20 40
+Run VarScan with a low variant frequency cutoff (N=0.001) to find rare mutations:
+```bash
+ java -jar VarScan.v2.3.9.jar mpileup2snp roommate.mpileup --min-var-freq 0.001 --variants --output-vcf 1 > rare_variants.vcf
+ ````
+ Only SNPs will be reported
+Warning: No p-value threshold provided, so p-values will not be calculated
+Min coverage:   8
+Min reads2:     2
+Min var freq:   0.001
+Min avg qual:   15
+P-value thresh: 0.01
+Reading input from roommate.mpileup
+1665 bases in pileup file
+12 variant positions (10 SNP, 2 indel)
+1 were failed by the strand-filter
+9 variant positions reported (9 SNP, 0 indel)
+20 45
+Extract the frequency of rare variants (FREQ field in the 10th column):
+awk 'NR>24 {print $1, $2, $4, $5, $10}' rare_variants.vcf | awk -F ":" '{print $1, $2, $3, $4, $5, $NF}' > rare_variants_freq_summary.txt
+
+Inspect and align the control sample sequencing data:
+```bash
+bwa mem sequence.fasta SRR1705858.fastq.gz | samtools view -S -b - | samtools sort -o control_1_sorted.bam
+samtools index control_1_sorted.bam
+
+bwa mem sequence.fasta SRR1705859.fastq.gz | samtools view -S -b - | samtools sort -o control_2_sorted.bam
+samtools index control_2_sorted.bam
+
+bwa mem sequence.fasta SRR1705860.fastq.gz | samtools view -S -b - | samtools sort -o control_3_sorted.bam
+samtools index control_3_sorted.bam
+```
+
+
+samtools mpileup -d 100000 -f sequence.fasta control_1_sorted.bam > control_1.mpileup
+samtools mpileup -d 100000 -f sequence.fasta control_2_sorted.bam > control_2.mpileup
+samtools mpileup -d 100000 -f sequence.fasta control_3_sorted.bam > control_3.mpileup
+
+java -jar VarScan.v2.3.9.jar mpileup2snp control_1.mpileup --min-var-freq 0.001 --variants --output-vcf 1 > control_1_variants.vcf
+
+Only SNPs will be reported
+Warning: No p-value threshold provided, so p-values will not be calculated
+Min coverage:   8
+Min reads2:     2
+Min var freq:   0.001
+Min avg qual:   15
+P-value thresh: 0.01
+Reading input from control_1.mpileup
+1665 bases in pileup file
+58 variant positions (58 SNP, 0 indel)
+1 were failed by the strand-filter
+57 variant positions reported (57 SNP, 0 indel)
+
+java -jar VarScan.v2.3.9.jar mpileup2snp control_2.mpileup --min-var-freq 0.001 --variants --output-vcf 1 > control_2_variants.vcf
+Only SNPs will be reported
+Warning: No p-value threshold provided, so p-values will not be calculated
+Min coverage:   8
+Min reads2:     2
+Min var freq:   0.001
+Min avg qual:   15
+P-value thresh: 0.01
+Reading input from control_2.mpileup
+1665 bases in pileup file
+54 variant positions (54 SNP, 0 indel)
+2 were failed by the strand-filter
+52 variant positions reported (52 SNP, 0 indel)
+
+ java -jar VarScan.v2.3.9.jar mpileup2snp control_3.mpileup --min-var-freq 0.001 --variants --output-vcf 1 > control_3_variants.vcf
+
+ Only SNPs will be reported
+Warning: No p-value threshold provided, so p-values will not be calculated
+Min coverage:   8
+Min reads2:     2
+Min var freq:   0.001
+Min avg qual:   15
+P-value thresh: 0.01
+Reading input from control_3.mpileup
+1665 bases in pileup file
+61 variant positions (61 SNP, 0 indel)
+0 were failed by the strand-filter
+61 variant positions reported (61 SNP, 0 indel)
+
+bedtools intersect -a rare_variants.vcf -b control_1_variants.vcf > shared_variants_control_1.vcf
+bedtools intersect -a rare_variants.vcf -b control_2_variants.vcf > shared_variants_control_2.vcf
+bedtools intersect -a rare_variants.vcf -b control_3_variants.vcf > shared_variants_control_3.vcf
