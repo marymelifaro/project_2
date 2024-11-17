@@ -153,6 +153,3 @@ Reading input from control_3.mpileup
 0 were failed by the strand-filter
 61 variant positions reported (61 SNP, 0 indel)
 
-bedtools intersect -a rare_variants.vcf -b control_1_variants.vcf > shared_variants_control_1.vcf
-bedtools intersect -a rare_variants.vcf -b control_2_variants.vcf > shared_variants_control_2.vcf
-bedtools intersect -a rare_variants.vcf -b control_3_variants.vcf > shared_variants_control_3.vcf
